@@ -1,11 +1,6 @@
-<<<<<<< HEAD
-node_modules
-=======
 node_modules/
 .env
 *.log
 .idea/
 .vscode/
 dist/
-
->>>>>>> dev

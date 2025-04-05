@@ -21,7 +21,7 @@ export default function Signup() {
       const data = await res.json();
 
       if (res.ok) {
-        alert('Signup successful. Please login.');
+        alert('Email verification sent. Please check your inbox.');
         router.push('/login');
       } else {
         alert(data.error || 'Signup failed');

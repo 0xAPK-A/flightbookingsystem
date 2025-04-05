@@ -95,17 +95,15 @@ exports.register = async (req, res) => {
       }
   
       const hashedPassword = await bcrypt.hash(password, 10);
-      const verificationToken = uuidv4();
   
-      await knex('users').insert({
-        name,
-        email,
-        password: hashedPassword,
-        is_verified: false,
-        verification_token: verificationToken
-      });
+      // 🔐 Generate email verification token with user data (not store in DB yet)
+      const token = jwt.sign(
+        { name, email, password: hashedPassword },
+        process.env.JWT_SECRET,
+        { expiresIn: '15m' } // 15 mins validity
+      );
   
-      // 👉 SEND EMAIL VERIFICATION LINK
+      // Send verification email
       const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
@@ -118,46 +116,103 @@ exports.register = async (req, res) => {
         from: process.env.EMAIL_USER,
         to: email,
         subject: "Verify your email",
-        html: `<p>Click <a href="http://localhost:3000/verify?token=${verificationToken}">here</a> to verify your email.</p>`
+        html: `<p>Click <a href="http://localhost:5001/api/auth/verify?token=${token}">here</a> to verify your email.</p>`
       };
   
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-          console.error("Email sending failed:", error);
-        } else {
-          console.log("Verification email sent:", info.response);
-        }
-      });
+      transporter.sendMail(mailOptions);
   
-      res.status(200).json({ message: "User registered. Check your email for verification link." });
+      res.status(200).json({ message: "Verification email sent. Please verify to complete signup." });
   
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Internal Server Error" });
     }
   };
+  
   exports.verifyEmail = async (req, res) => {
     const { token } = req.query;
   
-    if (!token) {
-      return res.status(400).json({ message: "Token is missing." });
-    }
+    if (!token) return res.status(400).json({ error: "Token missing" });
   
     try {
-      const user = await knex('users').where({ verification_token: token }).first();
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const { name, email, password } = decoded;
   
-      if (!user) {
-        return res.status(400).json({ message: "Invalid token." });
+      // Check again if user already exists
+      const userExists = await knex('users').where({ email }).first();
+      if (userExists) {
+        return res.status(400).json({ error: "User already exists or already verified." });
       }
   
-      await knex('users')
-        .where({ id: user.id })
-        .update({ is_verified: true, verification_token: null });
+      // Now insert the user
+      await knex('users').insert({
+        name,
+        email,
+        password,
+        is_verified: true
+      });
   
-      return res.status(200).json({ message: "Email verified successfully." });
+      return res.status(200).json({ message: "Email verified and user created successfully." });
+  
     } catch (err) {
       console.error(err);
-      return res.status(500).json({ message: "Server error." });
+      return res.status(400).json({ error: "Invalid or expired token." });
     }
   };
-    
+  
+exports.resendVerificationEmail = async (req, res) => {
+    const { name, email, password } = req.body;
+
+    try {
+        // 1. Check if user is already in DB
+        const existingUser = await knex('users').where({ email }).first();
+
+        if (existingUser && existingUser.is_verified) {
+            return res.status(400).json({ error: "User already verified. Please log in." });
+        }
+
+        if (existingUser && !existingUser.is_verified) {
+            return res.status(400).json({ error: "Verification email already sent earlier." });
+        }
+
+        // 2. Hash password again
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // 3. Create new verification token with info
+        const token = jwt.sign(
+            { name, email, password: hashedPassword },
+            process.env.JWT_SECRET,
+            { expiresIn: "15m" }
+        );
+
+        // 4. Send verification email
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            }
+        });
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: "Verify your email again",
+            html: `<p>Click <a href="http://localhost:3000/verify?token=${token}">here</a> to verify your email.</p>`
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.error("Email sending failed:", error);
+                return res.status(500).json({ error: "Failed to send verification email" });
+            } else {
+                console.log("Verification email re-sent:", info.response);
+                return res.status(200).json({ message: "Verification email re-sent. Check your inbox." });
+            }
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Server error during resend" });
+    }
+};

@@ -1,8 +1,11 @@
+
 node_modules/
 .env
 *.log
 .idea/
 .vscode/
 dist/
-backend/test-db.js
-backend/.env
+
+
+node_modules
+

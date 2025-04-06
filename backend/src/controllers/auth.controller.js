@@ -5,6 +5,23 @@ const knex = require('../../knex');
 const { v4: uuidv4 } = require('uuid');
 const nodemailer = require('nodemailer');
 
+const os = require('os');
+
+function getLocalIP() {
+  const networkInterfaces = os.networkInterfaces();
+
+  for (const interfaceName in networkInterfaces) {
+    for (const net of networkInterfaces[interfaceName]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address; // Return the first non-internal IPv4 address
+      }
+    }
+  }
+
+  return 'localhost'; // Fallback if none found
+}
+
+const myLocalIP = getLocalIP();
 
 // User Signup
 // exports.signup = async (req, res) => {
@@ -116,7 +133,7 @@ exports.register = async (req, res) => {
         from: process.env.EMAIL_USER,
         to: email,
         subject: "Verify your email",
-        html: `<p>Click <a href="http://localhost:5001/api/auth/verify?token=${token}">here</a> to verify your email.</p>`
+        html: `<p>Click <a href="https://${myLocalIP}:5001/api/auth/verify?token=${token}">here</a> to verify your email.</p>`
       };
   
       transporter.sendMail(mailOptions);
@@ -198,7 +215,7 @@ exports.resendVerificationEmail = async (req, res) => {
             from: process.env.EMAIL_USER,
             to: email,
             subject: "Verify your email again",
-            html: `<p>Click <a href="http://localhost:3000/verify?token=${token}">here</a> to verify your email.</p>`
+            html: `<p>Click <a href="http://${myLocalIP}:3000/verify?token=${token}">here</a> to verify your email.</p>`
         };
 
         transporter.sendMail(mailOptions, (error, info) => {

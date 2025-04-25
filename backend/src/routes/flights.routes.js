@@ -7,5 +7,6 @@ router.get('/', flightsController.getAllFlights);
 
 // POST /api/flights - create a new flight segment (admin/operator only)
 router.post('/', flightsController.createFlight);
+router.get('/search', flightsController.searchFlights);
 
 module.exports = router;

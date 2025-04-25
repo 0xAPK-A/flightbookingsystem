@@ -23,32 +23,6 @@ function getLocalIP() {
 
 const myLocalIP = getLocalIP();
 
-// User Signup
-// exports.signup = async (req, res) => {
-//     const { name, email, password } = req.body;
-//     try {
-//         // Check if user exists
-//         const userExists = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-//         if (userExists.rows.length > 0) {
-//             return res.status(400).json({ error: "User already exists" });
-//         }
-
-//         // Hash password
-//         const hashedPassword = await bcrypt.hash(password, 10);
-//         const result = await pool.query(
-//             "INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email",
-//             [name, email, hashedPassword]
-//         );
-
-//         // Generate JWT Token
-//         const token = jwt.sign({ id: result.rows[0].id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-
-//         res.status(201).json({ user: result.rows[0], token });
-//     } catch (error) {
-//         console.error("Signup error:", error);
-//         res.status(500).json({ error: "Signup failed" });
-//     }
-// };
 
 // User Login
 exports.login = async (req, res) => {
@@ -133,7 +107,7 @@ exports.register = async (req, res) => {
         from: process.env.EMAIL_USER,
         to: email,
         subject: "Verify your email",
-        html: `<p>Click <a href="https://${myLocalIP}:5001/api/auth/verify?token=${token}">here</a> to verify your email.</p>`
+        html: `<p>Click <a href="http://${myLocalIP}:5001/api/auth/verify?token=${token}">here</a> to verify your email.</p>`
       };
   
       transporter.sendMail(mailOptions);
@@ -232,4 +206,65 @@ exports.resendVerificationEmail = async (req, res) => {
         console.error(err);
         return res.status(500).json({ error: "Server error during resend" });
     }
+};
+
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+      const user = await knex('users').where({ email }).first();
+      if (!user) {
+          return res.status(404).json({ error: "User not found" });
+      }
+
+      // Generate password reset token (expires in 15 mins)
+      const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "15m" });
+
+      const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+              user: process.env.EMAIL_USER,
+              pass: process.env.EMAIL_PASS
+          }
+      });
+
+      const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: "Reset your password",
+          html: `<p>Click <a href="http://localhost:3000/reset-password?token=${token}">here</a> to reset your password.</p>`
+      };
+
+      await transporter.sendMail(mailOptions);
+      return res.status(200).json({ message: "Password reset email sent." });
+
+  } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+      return res.status(400).json({ error: "Missing token or new password" });
+  }
+
+  try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const email = decoded.email;
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      await knex('users')
+          .where({ email })
+          .update({ password: hashedPassword });
+
+      res.status(200).json({ message: "Password updated successfully" });
+
+  } catch (err) {
+      console.error("Reset password error:", err);
+      return res.status(400).json({ error: "Invalid or expired token" });
+  }
 };

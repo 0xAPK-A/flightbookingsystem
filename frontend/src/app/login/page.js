@@ -75,7 +75,8 @@ export default function Login() {
         >
           Login
         </button>
-        <p>Don't have an account? <a href="/signup">Signup here</a></p>
+        <p>Don't have an account? <a href="/signup" style={{ color: '#0070f3' }}>Signup here</a></p>
+        <p style={{ marginTop: '0.5rem' }}><a href="/forgot-password" style={{ color: '#0070f3' }}>Forgot Password?</a></p>
       </form>
     </div>
   )
